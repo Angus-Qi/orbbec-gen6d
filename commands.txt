@@ -1,0 +1,21 @@
+python prepare.py --action video2image \
+                  --input data/custom/video/mouse-ref.mp4 \
+                  --output data/custom/mouse_processed/images \
+                  --frame_inter 10 \
+                  --image_size 960
+
+
+python prepare.py --action sfm --database_name custom/mouse_processed --colmap colmap
+
+python predict.py --cfg configs/gen6d_pretrain.yaml \
+                  --database custom/mouse_processed \
+                  --video data/custom/video/mouse-test.mp4 \
+                  --resolution 960 \
+                  --output data/custom/mouse_processed/output \
+                  --ffmpeg ffmpeg
+
+
+for pyorbbecsdk: (take note of cmake file, conda python path)
+export PYTHONPATH=$PYTHONPATH:/home/mallab/qixuan/pyorbbecsdk/install/lib/ 
+
+python predict-orbbec.py --cfg configs/gen6d_pretrain.yaml --database custom/mouse_processed
