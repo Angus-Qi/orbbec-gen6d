@@ -145,7 +145,6 @@ class Gen6DEstimator:
         ref_ids = select_reference_img_ids_fps(database, ref_ids_all, self.cfg['ref_view_num'])
         ref_imgs, ref_masks, ref_Ks, ref_poses, ref_Hs = \
             normalize_reference_views(database, ref_ids, self.cfg['ref_resolution'], 0.05) # gets poses for each frame
-        print("here: ", ref_imgs.shape)
         # in-plane rotation for viewpoint selection
         rfn, h, w, _ = ref_imgs.shape
         ref_imgs_rots = []

@@ -18,18 +18,7 @@ import cv2
 import time
 from pyorbbecsdk import *
 from utils.utils import frame_to_bgr_image
-'''
-cd ./pyorbbecsdk
-export PYTHONPATH=$PYTHONPATH:$(pwd)/install/lib/
-python predict-orbbec.py --cfg configs/gen6d_pretrain.yaml --database custom/mouse_processed
-python predict-orbbec.py --cfg configs/gen6d_pretrain.yaml --database custom/toolbox 
-python predict.py --cfg configs/gen6d_pretrain.yaml \
-                  --database custom/box \
-                  --video data/custom/box/box-ref.mp4 \
-                  --resolution 960 \
-                  --output data/custom/box/test \
-                  --ffmpeg ffmpeg
-'''
+
 class TemporalFilter:
     def __init__(self, alpha):
         self.alpha = alpha
@@ -59,7 +48,7 @@ def get_pose(img, pose_init, hist_pts, estimator, ref_database):
     object_bbox_3d, midpt3d, = pts_range_to_bbox_pts(np.max(object_pts,0), np.min(object_pts,0))
     h, w, _ = img.shape
     f=np.sqrt(h**2+w**2)
-    K = np.asarray([[f,0,w/2],[0,f,h/2],[0,0,1]],np.float32) #use with camera intrinsics, or use ros package to find from the camera
+    K = np.asarray([[f,0,w/2],[0,f,h/2],[0,0,1]],np.float32) #use own camera intrinsics
 
     if pose_init is not None:
         estimator.cfg['refine_iter'] = 1 # we only refine one time after initialization
@@ -136,24 +125,25 @@ def main(args):
         depth_data = depth_data.reshape((height, width))
         depth_data = depth_data.astype(np.float32) * scale
         depth_data = temporal_filter.process(depth_data)
-        #depth_image = cv2.normalize(depth_data, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
+        
+        # #Show Depth map
+        # depth_image = cv2.normalize(depth_data, None, 0, 255, cv2.NORM_MINMAX, dtype=cv2.CV_8U)
         # depth_image = (depth_data * (255 / 5000)).astype(np.uint8) #Normalisation, max depth is 10000mm
         # depth_image = cv2.applyColorMap(depth_image, cv2.COLORMAP_JET)
-
-        
-        
-        #color_image = cv2.resize(color_image, (0, 0), fx=1/2, fy=1/2)
+        # color_image = cv2.resize(color_image, (0, 0), fx=1/2, fy=1/2)
         # disparityFrame = cv2.resize(disparityFrame, (0, 0), fx=1/3, fy=1/3)
         
+        frameCount += 1
         if frameCount%20==0: # Recompute every 20 frames
+            
             if startTime:
                 timeNow = time.time() #Return time in seconds, float
                 frameFps = round(20 / (timeNow - startTime), 2)
                 frameFpsText = str(frameFps)
+
             pose_init = None
             startTime = time.time()
-        frameCount += 1
-
+        
         pose_im, pose_init, sixDPose, camera_matrix, dist_coefficient, midpt2d = get_pose(color_image, pose_init, hist_pts, estimator, ref_database)
         
         ### Show FPS ###
@@ -182,52 +172,50 @@ def main(args):
         axis_points = np.array([[0, 0, 0], [scale, 0, 0], [0, scale, 0], [0, 0, scale]], dtype=np.float64)
         image_points, _ = cv2.projectPoints(axis_points, rotation_matrix, translation_vector, camera_matrix, dist_coefficient) #input matrix should be in np.float64
         image_points = np.int32(image_points).reshape(-1, 2)
-        # print("image_points")
-        # print(tuple(image_points[0]))
+
         ############################
 
         midpt2d = tuple(np.int32(midpt2d)[0]) # x,y
         print('midpt2d: ', midpt2d)
-        # baseline = 75 # 75mm for oakd pro
-        #focal_length_in_pixels = image_width_in_pixels * 0.5 / tan(HFOV * 0.5 * PI/180) HFOV = Horizontal FOV, from depthai depth calculation
-        # focalLength = disparityFrame.shape[1] * 0.5 / np.tan(69 * 0.5 * np.pi/180)
-        # estDepth = focalLength * baseline / ctrDisparity
-        ctrDisparity = depth_data[midpt2d[1]][midpt2d[0]] #implement index range check
-        print('depth at ctr point: %.2fmm' % ctrDisparity)
 
-        # 6d metric pose
-        camera_space = translation_vector/translation_vector[-1] * ctrDisparity #since obj ctr is [0,0,0]
-        camera_space = camera_space + np.array([0,21,0])
-        # camera_space = translation_vector
+        try: # Index range check
+            ctrDisparity = depth_data[midpt2d[1]][midpt2d[0]] 
+        except:
+            print("Midpoint estimated out of frame")
+        print('depth at ctr point: %.2fmm' % ctrDisparity) 
+
+        # 6d metric pose, d**2 = x**2 + y**2 + z**2 by pythagoras theorem, frame centre is [0,0,0]
+        #Right is positive x, up is negative y, inside is positive z
+        #Diameter of custom database object set to 2.0, therefore add 1 to z axis to account for obj radius
+        camera_space = translation_vector * ctrDisparity/((translation_vector[-1]+1.0)**2+translation_vector[-2]**2+translation_vector[-3]**2)**0.5
         print('Metric location of object in camera space: ', camera_space)
 
-
-
         cv2.circle(pose_im, midpt2d, radius=10, color=(255, 127, 127),thickness= -1)
-        # cv2.circle(depth_image,midpt2d, radius=10, color=(255, 127, 127),thickness= -1)
         xDiff = image_points[1]-image_points[0]
         yDiff = image_points[2]-image_points[0]
         zDiff = image_points[3]-image_points[0]
         cv2.line(pose_im, midpt2d, midpt2d+xDiff, (0, 0, 255), 2)  # X-axis (Red)
         cv2.line(pose_im, midpt2d, midpt2d+yDiff, (0, 255, 0), 2)  # Y-axis (Green)
         cv2.line(pose_im, midpt2d, midpt2d+zDiff, (255, 0, 0), 2)  # Z-axis (Blue)
+        cv2.imshow("Colour image", pose_im)
+
+        # # Show on depth map
+        # cv2.circle(depth_image,midpt2d, radius=10, color=(255, 127, 127),thickness= -1)
         # cv2.line(pose_im, tuple(image_points[0]), tuple(image_points[1]), (0, 0, 255), 2)  # X-axis (Red)
         # cv2.line(pose_im, tuple(image_points[0]), tuple(image_points[2]), (0, 255, 0), 2)  # Y-axis (Green)
         # cv2.line(pose_im, tuple(image_points[0]), tuple(image_points[3]), (255, 0, 0), 2)  # Z-axis (Blue)
-        
-        cv2.imshow("Colour image", pose_im)
         # cv2.imshow("Depth map", depth_image)
 
         ## Key Control ###########################
         if pressedKey == None:
             pressedKey = cv2.waitKey(1) & 0xFF
-        if pressedKey == ord('p'):
+        if pressedKey == ord('p'): #Pause
             pause = True
-        elif pressedKey == ord('q'):
+        elif pressedKey == ord('q'): #Quit
             break
         while pause:
             time.sleep(0.5)
-            if cv2.waitKey(1) == ord('c'):
+            if cv2.waitKey(1) == ord('c'): #Continue
                 pause = False
         pressedKey = None
         ##########################################
