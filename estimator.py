@@ -183,6 +183,7 @@ class Gen6DEstimator:
             que_img_, _ = transformation_crop(que_img, position, 1/scale_r2q, 0, self.cfg['ref_resolution'])  # h,w,3
             inter_results['det_position'] = position
             inter_results['det_scale_r2q'] = scale_r2q
+            print("this is scale: ", scale_r2q)
             inter_results['det_que_img'] = que_img_
 
             # stage 2: viewpoint selection

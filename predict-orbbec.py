@@ -168,11 +168,6 @@ def main(args):
         translation_vector = np.array(sixDPose[:,3], dtype=np.float64)
         camera_matrix = np.array(camera_matrix, dtype=np.float64)
         dist_coefficient = np.array(dist_coefficient, dtype=np.float64)
-        scale = 1.0
-        axis_points = np.array([[0, 0, 0], [scale, 0, 0], [0, scale, 0], [0, 0, scale]], dtype=np.float64)
-        image_points, _ = cv2.projectPoints(axis_points, rotation_matrix, translation_vector, camera_matrix, dist_coefficient) #input matrix should be in np.float64
-        image_points = np.int32(image_points).reshape(-1, 2)
-
         ############################
 
         midpt2d = tuple(np.int32(midpt2d)[0]) # x,y
@@ -186,11 +181,17 @@ def main(args):
 
         # 6d metric pose, d**2 = x**2 + y**2 + z**2 by pythagoras theorem, frame centre is [0,0,0]
         #Right is positive x, up is negative y, inside is positive z
-        #Diameter of custom database object set to 2.0, therefore add 1 to z axis to account for obj radius
-        camera_space = translation_vector * ctrDisparity/((translation_vector[-1]+1.0)**2+translation_vector[-2]**2+translation_vector[-3]**2)**0.5
+        #Diameter of custom database object set to 2.0, therefore minus 1.0 from diagonal distance to account for obj radius
+        camera_space = translation_vector * ctrDisparity/(((translation_vector[-1])**2+translation_vector[-2]**2+translation_vector[-3]**2)**0.5 - 1.0)
         print('Metric location of object in camera space: ', camera_space)
 
+        #Draw obj centre
         cv2.circle(pose_im, midpt2d, radius=10, color=(255, 127, 127),thickness= -1)
+        #Draw axis lines
+        scale = 1.0
+        axis_points = np.array([[0, 0, 0], [scale, 0, 0], [0, scale, 0], [0, 0, scale]], dtype=np.float64)
+        image_points, _ = cv2.projectPoints(axis_points, rotation_matrix, translation_vector, camera_matrix, dist_coefficient) #input matrix should be in np.float64
+        image_points = np.int32(image_points).reshape(-1, 2)
         xDiff = image_points[1]-image_points[0]
         yDiff = image_points[2]-image_points[0]
         zDiff = image_points[3]-image_points[0]

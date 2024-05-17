@@ -15,7 +15,7 @@ python predict.py --cfg configs/gen6d_pretrain.yaml \
                   --ffmpeg ffmpeg
 
 
-for pyorbbecsdk: (take note of cmake file, conda python path)
-export PYTHONPATH=$PYTHONPATH:/home/mallab/qixuan/pyorbbecsdk/install/lib/ 
+for pyorbbecsdk: (take note of cmake file, conda python path) 
+export PYTHONPATH=$PYTHONPATH:../pyorbbecsdk/install/lib/ 
 
 python predict-orbbec.py --cfg configs/gen6d_pretrain.yaml --database custom/mouse_processed
